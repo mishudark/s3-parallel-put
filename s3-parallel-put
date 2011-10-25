@@ -75,6 +75,9 @@ def main(argv):
     if not options.bucket:
         logger.error('missing bucket')
         return 1
+    if not options.dry_run:
+        connection = S3Connection(is_secure=options.secure)
+        bucket = connection.get_bucket(options.bucket)
     sources, destination = args[:-1], args[-1]
     queue = Queue()
     processes = [Process(target=putter, args=(queue, options)) for i in xrange(options.processes)]
