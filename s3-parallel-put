@@ -39,10 +39,10 @@ def putter(queue, options):
         connection = S3Connection(is_secure=options.secure)
         bucket = connection.get_bucket(options.bucket)
     while True:
-        job = queue.get()
-        if job is None:
+        args = queue.get()
+        if args is None:
             break
-        filename, key_name = job
+        filename, key_name = args
         if not options.dry_run:
             key = bucket.new_key(key_name)
             with open(filename) as fp:
