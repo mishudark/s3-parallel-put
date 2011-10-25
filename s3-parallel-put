@@ -17,7 +17,6 @@
 
 import logging
 from multiprocessing import Process, Queue, current_process
-from Queue import Empty
 from optparse import OptionParser
 import os.path
 import sys
