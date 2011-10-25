@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+#   Parallel uploads to Amazon AWS S3
+#   Copyright (C) 2011  Tom Payne
+#
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import logging
+from multiprocessing import Process, Queue, current_process
+from Queue import Empty
+from optparse import OptionParser
+import os.path
+import sys
+
+from boto.s3.connection import S3Connection
+
+
+logger = logging.getLogger(os.path.basename(sys.argv[0]))
+
+
+def walk(source):
+    for dirpath, dirnames, filenames in os.walk(source):
+        for filename in filenames:
+            path = os.path.join(dirpath, filename)
+            if os.path.isfile(path):
+                yield path
+
+
+def putter(queue, options):
+    logger = logging.getLogger('%s[%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
+    logger.debug('starting')
+    if not options.dry_run:
+        connection = S3Connection(is_secure=options.secure)
+        bucket = connection.get_bucket(options.bucket)
+    while True:
+        job = queue.get()
+        if job is None:
+            break
+        filename, key_name = job
+        logger.info('%s -> %s' % (filename, key_name))
+        if not options.dry_run:
+            key = bucket.new_key(key_name)
+            with open(filename) as fp:
+                def cb(bytes_so_far, total_bytes):
+                    logger.debug('%s -> %s %d/%d (%d%%)' % (filename, key_name, bytes_so_far, total_bytes, 100 * bytes_so_far / total_bytes))
+                key.set_contents_from_file(fp, cb=cb)
+    logger.debug('terminating')
+
+
+def main(argv):
+    argv0 = os.path.basename(argv[0])
+    parser = OptionParser()
+    parser.add_option('--bucket', metavar='BUCKET')
+    parser.add_option('--dry-run', action='store_true')
+    parser.add_option('--insecure', action='store_false', dest='secure')
+    parser.add_option('--processes', '-p', default=1, metavar='PROCESSES', type=int)
+    parser.add_option('--quiet', '-q', action='count', default=0)
+    parser.add_option('--secure', action='store_true', default=True, dest='secure')
+    parser.add_option('--verbose', '-v', action='count', default=0)
+    options, args = parser.parse_args(argv[1:])
+    logging.basicConfig(level=logging.INFO + 10 * (options.quiet - options.verbose))
+    if len(args) < 1:
+        logger.error('missing source operand')
+        return 1
+    if len(args) < 2:
+        logger.error('missing destination operand after %r' % args[0])
+        return 1
+    if not options.bucket:
+        logger.error('missing bucket')
+        return 1
+    sources, destination = args[:-1], args[-1]
+    queue = Queue()
+    processes = [Process(target=putter, args=(queue, options)) for i in xrange(options.processes)]
+    for process in processes:
+        process.start()
+    for source in sources:
+        for filename in walk(source):
+            key_name = os.path.normpath(os.path.join(destination, filename))
+            queue.put([filename, key_name])
+    for process in processes:
+        queue.put(None)
+    queue.close()
+    for process in processes:
+        process.join()
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
