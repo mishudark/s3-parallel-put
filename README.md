@@ -60,6 +60,8 @@ To Do
 
 * Possibly use `multiprocessing.JoinableQueue`.
 
+* Automatically parallelize uploads of large files by splitting into chunks.
+
 
 Licence
 -------
