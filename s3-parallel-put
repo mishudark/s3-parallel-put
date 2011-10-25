@@ -25,9 +25,6 @@ import sys
 from boto.s3.connection import S3Connection
 
 
-logger = logging.getLogger(os.path.basename(sys.argv[0]))
-
-
 def walk(source):
     for dirpath, dirnames, filenames in os.walk(source):
         for filename in filenames:
@@ -58,7 +55,6 @@ def putter(queue, options):
 
 
 def main(argv):
-    argv0 = os.path.basename(argv[0])
     parser = OptionParser()
     parser.add_option('--bucket', metavar='BUCKET')
     parser.add_option('--dry-run', action='store_true')
@@ -69,6 +65,7 @@ def main(argv):
     parser.add_option('--verbose', '-v', action='count', default=0)
     options, args = parser.parse_args(argv[1:])
     logging.basicConfig(level=logging.INFO + 10 * (options.quiet - options.verbose))
+    logger = logging.getLogger(os.path.basename(sys.argv[0]))
     if len(args) < 1:
         logger.error('missing source operand')
         return 1
