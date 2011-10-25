@@ -62,6 +62,8 @@ To Do
 
 * Automatically parallelize uploads of large files by splitting into chunks.
 
+* Gather upload statistics and print summary at end.
+
 
 Licence
 -------
