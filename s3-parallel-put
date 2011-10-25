@@ -55,7 +55,7 @@ def putter(queue, options):
 
 def main(argv):
     parser = OptionParser()
-    parser.add_option('--bucket', metavar='BUCKET')
+    parser.add_option('--bucket', '-b', metavar='BUCKET')
     parser.add_option('--dry-run', action='store_true')
     parser.add_option('--insecure', action='store_false', dest='secure')
     parser.add_option('--processes', '-p', default=4, metavar='PROCESSES', type=int)
