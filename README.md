@@ -3,7 +3,7 @@ s3-parallel-put  Parallel uploads to Amazon AWS S3
 
 s3-parallel-put speeds the uploading of many small files to Amazon AWS S3 by
 executing multiple PUTs in parallel.  It does not check for prior existence of
-the file on S3 and therefore is only suitable as a initial data upload tool.
+the file on S3 and therefore is only suitable as an initial data upload tool.
 
 
 Dependencies
