@@ -59,7 +59,7 @@ def main(argv):
     parser.add_option('--bucket', metavar='BUCKET')
     parser.add_option('--dry-run', action='store_true')
     parser.add_option('--insecure', action='store_false', dest='secure')
-    parser.add_option('--processes', '-p', default=1, metavar='PROCESSES', type=int)
+    parser.add_option('--processes', '-p', default=4, metavar='PROCESSES', type=int)
     parser.add_option('--quiet', '-q', action='count', default=0)
     parser.add_option('--secure', action='store_true', default=True, dest='secure')
     parser.add_option('--verbose', '-v', action='count', default=0)
