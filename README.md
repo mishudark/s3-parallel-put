@@ -44,8 +44,12 @@ with `--dry-run`, this is also useful for testing.
 Architecture
 ------------
 
-A simple queue is used, with the parent process generating (filename, key_name)
-pairs and multiple worker processes consuming them.
+* A walker process generates (filename, key_name) pairs and inserts them in
+  `put_queue`.
+* Multiple putter processes consume these pairs in parallel, uploading the
+  files to S3 and sending file-by-file statistics to `stat_queue`.
+* A statter process consumes these file-by-file statistics and generates
+  summary statistics.
 
 
 Bugs
@@ -61,11 +65,7 @@ To Do
 
 * Add option to test for key and value (MD5) before uploading.
 
-* Possibly use `multiprocessing.JoinableQueue`.
-
 * Automatically parallelize uploads of large files by splitting into chunks.
-
-* Gather upload statistics and print summary at end.
 
 
 Licence
