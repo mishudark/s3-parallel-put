@@ -24,12 +24,16 @@ import sys
 from boto.s3.connection import S3Connection
 
 
-def walk(source):
-    for dirpath, dirnames, filenames in os.walk(source):
-        for filename in filenames:
-            path = os.path.join(dirpath, filename)
-            if os.path.isfile(path):
-                yield path
+def walk(sources, limit=-1):
+    for source in sources:
+        for dirpath, dirnames, filenames in os.walk(source):
+            for filename in filenames:
+                path = os.path.join(dirpath, filename)
+                if os.path.isfile(path):
+                    if limit == 0:
+                        return
+                    limit -= 1
+                    yield path
 
 
 def putter(queue, options):
@@ -58,6 +62,7 @@ def main(argv):
     parser.add_option('--bucket', '-b', metavar='BUCKET')
     parser.add_option('--dry-run', action='store_true')
     parser.add_option('--insecure', action='store_false', dest='secure')
+    parser.add_option('--limit', default=-1, metavar='N', type=int)
     parser.add_option('--processes', '-p', default=4, metavar='PROCESSES', type=int)
     parser.add_option('--quiet', '-q', action='count', default=0)
     parser.add_option('--secure', action='store_true', default=True, dest='secure')
@@ -85,10 +90,9 @@ def main(argv):
     processes = [Process(target=putter, args=(queue, options)) for i in xrange(options.processes)]
     for process in processes:
         process.start()
-    for source in sources:
-        for filename in walk(source):
-            key_name = os.path.normpath(os.path.join(destination, filename))
-            queue.put([filename, key_name])
+    for filename in walk(sources, limit=options.limit):
+        key_name = os.path.normpath(os.path.join(destination, filename))
+        queue.put([filename, key_name])
     for process in processes:
         queue.put(None)
     queue.close()

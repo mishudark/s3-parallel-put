@@ -31,6 +31,9 @@ There are a few other options:
 to S3 nor attempt to upload any files.  It is strongly recommended that you
 test the program with this option before transferring any real data.
 
+`--limit=N` causes the program to upload no more than N files.  Combined
+with `--dry-run`, this is also useful for testing.
+
 `--verbose` causes more output to be printed, including progress of individual files.
 
 `--quiet` causes less output.
