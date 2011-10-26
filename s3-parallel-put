@@ -20,6 +20,7 @@ from multiprocessing import JoinableQueue, Process, current_process
 from optparse import OptionParser
 import os.path
 import sys
+import time
 
 from boto.s3.connection import S3Connection
 
@@ -69,7 +70,7 @@ def putter(put_queue, stat_queue, options):
     logger.debug('terminating')
 
 
-def statter(stat_queue, options):
+def statter(stat_queue, start, options):
     logger = logging.getLogger('%s[statter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
     count, total_size = 0, 0
@@ -81,7 +82,8 @@ def statter(stat_queue, options):
         count += 1
         total_size += stat.st_size
         stat_queue.task_done()
-    logger.info('put %d bytes in %d files' % (total_size, count))
+    duration = time.time() - start
+    logger.info('put %d bytes in %d files in %.1f seconds (%d bytes/s, %.1f files/s)' % (total_size, count, duration, total_size / duration, count / duration))
     logger.debug('terminating')
 
 
@@ -115,6 +117,7 @@ def main(argv):
         del bucket
         del connection
     sources, destination = args[:-1], args[-1]
+    start = time.time()
     put_queue = JoinableQueue()
     stat_queue = JoinableQueue()
     walker_process = Process(target=walker, args=(put_queue, sources, destination, options))
@@ -124,7 +127,7 @@ def main(argv):
     for putter_process in putter_processes:
         putter_process.start()
         logger.debug('started putter-%d' % putter_process.pid)
-    statter_process = Process(target=statter, args=(stat_queue, options))
+    statter_process = Process(target=statter, args=(stat_queue, start, options))
     statter_process.start()
     logger.debug('started statter-%d' % statter_process.pid)
     logger.debug('joining walker-%d' % walker_process.pid)
