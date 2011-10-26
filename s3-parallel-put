@@ -67,7 +67,7 @@ def putter(put_queue, stat_queue, options):
         else:
             key = bucket.new_key(key_name)
             with open(filename) as fp:
-                stat = os.fstat(fp.fileno)
+                stat = os.fstat(fp.fileno())
                 def cb(bytes_so_far, total_bytes):
                     logger.debug('%s -> %s %d/%d (%d%%)' % (filename, key_name, bytes_so_far, total_bytes, 100 * bytes_so_far / total_bytes))
                 key.set_contents_from_file(fp, cb=cb)
