@@ -53,7 +53,7 @@ def walker(put_queue, sources, options):
 def putter(put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
-    if not options.dry_run:
+    if options.mode != 'offline':
         connection = S3Connection(is_secure=options.secure)
         bucket = connection.get_bucket(options.bucket)
     while True:
@@ -62,17 +62,48 @@ def putter(put_queue, stat_queue, options):
             put_queue.task_done()
             break
         filename, key_name = args
-        if options.dry_run:
-            stat = os.stat(filename)
-        else:
-            key = bucket.new_key(key_name)
+        if options.mode == 'add':
+            key = bucket.get_key(key_name)
+            if key is None:
+                with open(filename) as fp:
+                    key = bucket.new_key(key_name)
+                    if not options.dry_run:
+                        key.set_contents_from_file(fp)
+                    logger.info('%s -> %s' % (filename, key.name))
+                    stat_queue.put(os.fstat(fp.fileno()))
+            else:
+                logger.info('skipping %s -> %s (already exists)' % (filename, key_name))
+        elif options.mode == 'stupid':
             with open(filename) as fp:
-                stat = os.fstat(fp.fileno())
-                def cb(bytes_so_far, total_bytes):
-                    logger.debug('%s -> %s %d/%d (%d%%)' % (filename, key_name, bytes_so_far, total_bytes, 100 * bytes_so_far / total_bytes))
-                key.set_contents_from_file(fp, cb=cb)
-        stat_queue.put(stat)
-        logger.info('%s -> %s' % (filename, key_name))
+                key = bucket.new_key(key_name)
+                if not options.dry_run:
+                    key.set_contents_from_file(fp)
+                logger.info('%s -> %s' % (filename, key.name))
+                stat_queue.put(os.fstat(fp.fileno()))
+        elif options.mode == 'offline':
+            logger.info('%s -> %s' % (filename, key_name))
+            stat_queue.put(os.stat(filename))
+        elif options.mode == 'update':
+            key = bucket.get_key(key_name)
+            if key is None:
+                with open(filename) as fp:
+                    key = bucket.new_key(key_name)
+                    if not options.dry_run:
+                        key.set_contents_from_file(fp)
+                    logger.info('%s -> %s' % (filename, key.name))
+                    stat_queue.put(os.fstat(fp.fileno()))
+            else:
+                with open(filename) as fp:
+                    md5 = key.compute_md5(fp)
+                    if key.etag == '"%s"' % md5[0]:
+                        logger.info('skipping %s -> %s (content unchanged)' % (filename, key.name))
+                    else:
+                        if not options.dry_run:
+                            key.set_contents_from_file(fp)
+                        logger.info('%s -> %s' % (filename, key.name))
+                        stat_queue.put(os.fstat(fp.fileno()))
+        else:
+            assert False
         put_queue.task_done()
     logger.debug('terminating')
 
@@ -94,7 +125,6 @@ def statter(stat_queue, start, options):
     logger.debug('terminating')
 
 
-
 def main(argv):
     parser = OptionParser()
     parser.add_option('--bucket', '-b', metavar='BUCKET')
@@ -102,6 +132,7 @@ def main(argv):
     parser.add_option('--dry-run', action='store_true')
     parser.add_option('--insecure', action='store_false', dest='secure')
     parser.add_option('--limit', default=-1, metavar='N', type=int)
+    parser.add_option('--mode', choices=('add', 'offline', 'stupid', 'update'), default='update', metavar='MODE')
     parser.add_option('--processes', '-p', default=8, metavar='PROCESSES', type=int)
     parser.add_option('--quiet', '-q', action='count', default=0)
     parser.add_option('--secure', action='store_true', default=True, dest='secure')
@@ -118,7 +149,7 @@ def main(argv):
     if not options.destination:
         logger.error('missing destination')
         return 1
-    if not options.dry_run:
+    if options.mode != 'offline':
         # Test connection to S3
         connection = S3Connection(is_secure=options.secure)
         bucket = connection.get_bucket(options.bucket)
