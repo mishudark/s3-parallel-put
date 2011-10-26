@@ -25,7 +25,7 @@ import time
 from boto.s3.connection import S3Connection
 
 
-def walker(put_queue, sources, destination, options):
+def walker(put_queue, sources, options):
     logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
     limit = options.limit
@@ -39,13 +39,13 @@ def walker(put_queue, sources, destination, options):
                     if limit == 0:
                         return
                     limit -= 1
-                    key_name = os.path.normpath(os.path.join(destination, path))
+                    key_name = os.path.normpath(os.path.join(options.destination, path))
                     put_queue.put([path, key_name])
         elif os.path.isfile(source):
             if limit == 0:
                 return
             limit -= 1
-            key_name = os.path.normpath(os.path.join(destination, source))
+            key_name = os.path.normpath(os.path.join(options.destination, source))
             put_queue.put([source, key_name])
     logger.debug('terminating')
 
@@ -98,6 +98,7 @@ def statter(stat_queue, start, options):
 def main(argv):
     parser = OptionParser()
     parser.add_option('--bucket', '-b', metavar='BUCKET')
+    parser.add_option('--destination', '-d', metavar='DESTINATION')
     parser.add_option('--dry-run', action='store_true')
     parser.add_option('--insecure', action='store_false', dest='secure')
     parser.add_option('--limit', default=-1, metavar='N', type=int)
@@ -111,11 +112,11 @@ def main(argv):
     if len(args) < 1:
         logger.error('missing source operand')
         return 1
-    if len(args) < 2:
-        logger.error('missing destination operand after %r' % args[0])
-        return 1
     if not options.bucket:
         logger.error('missing bucket')
+        return 1
+    if not options.destination:
+        logger.error('missing destination')
         return 1
     if not options.dry_run:
         # Test connection to S3
@@ -123,11 +124,10 @@ def main(argv):
         bucket = connection.get_bucket(options.bucket)
         del bucket
         del connection
-    sources, destination = args[:-1], args[-1]
     start = time.time()
     put_queue = JoinableQueue()
     stat_queue = JoinableQueue()
-    walker_process = Process(target=walker, args=(put_queue, sources, destination, options))
+    walker_process = Process(target=walker, args=(put_queue, args, options))
     walker_process.start()
     logger.debug('started walker-%d' % walker_process.pid)
     putter_processes = [Process(target=putter, args=(put_queue, stat_queue, options)) for i in xrange(options.processes)]

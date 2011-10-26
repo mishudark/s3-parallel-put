@@ -16,11 +16,11 @@ Usage
 -----
 
 ```bash
-s3-parallel-put --bucket=BUCKET --processes=PROCESSES SOURCE DESTINATION
+s3-parallel-put --bucket=BUCKET --destination=DESTINATION SOURCE
 ```
 
-This starts a parallel put from `SOURCE` to `BUCKET`/`DESTINATION` with
-`PROCESSES` parallel processes.  Each PUT is printed *after* it has completed.
+This starts a parallel put from `SOURCE` to `BUCKET`/`DESTINATION`.  Each
+PUT is printed *after* it has completed.
 
 The program reads your credentials from the environment variables
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
@@ -33,6 +33,8 @@ test the program with this option before transferring any real data.
 
 `--limit=N` causes the program to upload no more than N files.  Combined
 with `--dry-run`, this is also useful for testing.
+
+`--processes=N` sets the number of parallel upload processes.
 
 `--verbose` causes more output to be printed, including progress of individual files.
 
