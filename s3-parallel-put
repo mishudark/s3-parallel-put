@@ -24,20 +24,26 @@ import sys
 from boto.s3.connection import S3Connection
 
 
-def walk(sources, limit=-1):
+def walker(queue, sources, destination, options):
+    logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
+    logger.debug('starting')
+    limit = options.limit
     for source in sources:
         for dirpath, dirnames, filenames in os.walk(source):
             for filename in filenames:
                 path = os.path.join(dirpath, filename)
-                if os.path.isfile(path):
-                    if limit == 0:
-                        return
-                    limit -= 1
-                    yield path
+                if not os.path.isfile(path):
+                    continue
+                if limit == 0:
+                    return
+                limit -= 1
+                key_name = os.path.normpath(os.path.join(destination, path))
+                queue.put([path, key_name])
+    logger.debug('terminating')
 
 
 def putter(queue, options):
-    logger = logging.getLogger('%s[%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
+    logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
     if not options.dry_run:
         connection = S3Connection(is_secure=options.secure)
@@ -87,17 +93,17 @@ def main(argv):
         del connection
     sources, destination = args[:-1], args[-1]
     queue = Queue()
-    processes = [Process(target=putter, args=(queue, options)) for i in xrange(options.processes)]
-    for process in processes:
-        process.start()
-    for filename in walk(sources, limit=options.limit):
-        key_name = os.path.normpath(os.path.join(destination, filename))
-        queue.put([filename, key_name])
-    for process in processes:
+    walker_process = Process(target=walker, args=(queue, sources, destination, options))
+    walker_process.start()
+    putter_processes = [Process(target=putter, args=(queue, options)) for i in xrange(options.processes)]
+    for putter_process in putter_processes:
+        putter_process.start()
+    walker_process.join()
+    for putter_process in putter_processes:
         queue.put(None)
     queue.close()
-    for process in processes:
-        process.join()
+    for putter_process in putter_processes:
+        putter_process.join()
 
 
 if __name__ == '__main__':
