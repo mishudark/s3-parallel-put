@@ -16,7 +16,7 @@
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-from multiprocessing import Process, Queue, current_process
+from multiprocessing import JoinableQueue, Process, current_process
 from optparse import OptionParser
 import os.path
 import sys
@@ -24,7 +24,7 @@ import sys
 from boto.s3.connection import S3Connection
 
 
-def walker(queue, sources, destination, options):
+def walker(put_queue, sources, destination, options):
     logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
     limit = options.limit
@@ -38,29 +38,52 @@ def walker(queue, sources, destination, options):
                     return
                 limit -= 1
                 key_name = os.path.normpath(os.path.join(destination, path))
-                queue.put([path, key_name])
+                put_queue.put([path, key_name])
     logger.debug('terminating')
 
 
-def putter(queue, options):
+def putter(put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
     if not options.dry_run:
         connection = S3Connection(is_secure=options.secure)
         bucket = connection.get_bucket(options.bucket)
     while True:
-        args = queue.get()
+        args = put_queue.get()
         if args is None:
+            put_queue.task_done()
             break
         filename, key_name = args
-        if not options.dry_run:
+        if options.dry_run:
+            stat = os.stat(filename)
+        else:
             key = bucket.new_key(key_name)
             with open(filename) as fp:
+                stat = os.fstat(fp.fileno)
                 def cb(bytes_so_far, total_bytes):
                     logger.debug('%s -> %s %d/%d (%d%%)' % (filename, key_name, bytes_so_far, total_bytes, 100 * bytes_so_far / total_bytes))
                 key.set_contents_from_file(fp, cb=cb)
+        stat_queue.put(stat)
         logger.info('%s -> %s' % (filename, key_name))
+        put_queue.task_done()
     logger.debug('terminating')
+
+
+def statter(stat_queue, options):
+    logger = logging.getLogger('%s[statter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
+    logger.debug('starting')
+    count, total_size = 0, 0
+    while True:
+        stat = stat_queue.get()
+        if stat is None:
+            stat_queue.task_done()
+            break
+        count += 1
+        total_size += stat.st_size
+        stat_queue.task_done()
+    logger.info('put %d bytes in %d files' % (total_size, count))
+    logger.debug('terminating')
+
 
 
 def main(argv):
@@ -92,18 +115,36 @@ def main(argv):
         del bucket
         del connection
     sources, destination = args[:-1], args[-1]
-    queue = Queue()
-    walker_process = Process(target=walker, args=(queue, sources, destination, options))
+    put_queue = JoinableQueue()
+    stat_queue = JoinableQueue()
+    walker_process = Process(target=walker, args=(put_queue, sources, destination, options))
     walker_process.start()
-    putter_processes = [Process(target=putter, args=(queue, options)) for i in xrange(options.processes)]
+    logger.debug('started walker-%d' % walker_process.pid)
+    putter_processes = [Process(target=putter, args=(put_queue, stat_queue, options)) for i in xrange(options.processes)]
     for putter_process in putter_processes:
         putter_process.start()
+        logger.debug('started putter-%d' % putter_process.pid)
+    statter_process = Process(target=statter, args=(stat_queue, options))
+    statter_process.start()
+    logger.debug('started statter-%d' % statter_process.pid)
+    logger.debug('joining walker-%d' % walker_process.pid)
     walker_process.join()
+    logger.debug('shutting down put_queue')
     for putter_process in putter_processes:
-        queue.put(None)
-    queue.close()
+        put_queue.put(None)
+    put_queue.close()
     for putter_process in putter_processes:
+        logger.debug('joining putter-%d' % putter_process.pid)
         putter_process.join()
+    logger.debug('shutting down stat_queue')
+    stat_queue.put(None)
+    stat_queue.close()
+    logger.debug('joining statter-%d' % walker_process.pid)
+    statter_process.join()
+    logger.debug('joining put_queue')
+    put_queue.join_thread()
+    logger.debug('joining stat_queue')
+    stat_queue.join_thread()
 
 
 if __name__ == '__main__':
