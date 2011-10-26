@@ -30,16 +30,23 @@ def walker(put_queue, sources, destination, options):
     logger.debug('starting')
     limit = options.limit
     for source in sources:
-        for dirpath, dirnames, filenames in os.walk(source):
-            for filename in filenames:
-                path = os.path.join(dirpath, filename)
-                if not os.path.isfile(path):
-                    continue
-                if limit == 0:
-                    return
-                limit -= 1
-                key_name = os.path.normpath(os.path.join(destination, path))
-                put_queue.put([path, key_name])
+        if os.path.isdir(source):
+            for dirpath, dirnames, filenames in os.walk(source):
+                for filename in filenames:
+                    path = os.path.join(dirpath, filename)
+                    if not os.path.isfile(path):
+                        continue
+                    if limit == 0:
+                        return
+                    limit -= 1
+                    key_name = os.path.normpath(os.path.join(destination, path))
+                    put_queue.put([path, key_name])
+        elif os.path.isfile(source):
+            if limit == 0:
+                return
+            limit -= 1
+            key_name = os.path.normpath(os.path.join(destination, source))
+            put_queue.put([source, key_name])
     logger.debug('terminating')
 
 
