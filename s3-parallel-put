@@ -21,6 +21,7 @@ from multiprocessing import JoinableQueue, Process, current_process
 from optparse import OptionParser
 import os.path
 import sys
+import tarfile
 import time
 
 from boto.s3.connection import S3Connection
@@ -52,6 +53,24 @@ class Walker(object):
 
     def walk(self, source):
         raise NotImplementedError
+
+
+class TarWalker(Walker):
+
+    def walk(self, source):
+        if tarfile.is_tarfile(source):
+            tf = tarfile.open(source)
+            try:
+                for tarinfo in tf:
+                    if tarinfo.isfile():
+                        path = tarinfo.name
+                        key_name = os.path.normpath(os.path.join(self.options.destination, path))
+                        content = tf.extractfile(tarinfo).read()
+                        yield dict(content=content, key_name=key_name, path=path)
+            finally:
+                tf.close()
+        else:
+            self.logger.error('%r is not a tar file' % source)
 
 
 class TreeWalker(Walker):
@@ -192,6 +211,7 @@ def main(argv):
     parser.add_option('--processes', '-p', default=8, metavar='PROCESSES', type=int)
     parser.add_option('--quiet', '-q', action='count', default=0)
     parser.add_option('--secure', action='store_true', default=True, dest='secure')
+    parser.add_option('--tar', action='store_true')
     parser.add_option('--verbose', '-v', action='count', default=0)
     options, args = parser.parse_args(argv[1:])
     logging.basicConfig(level=logging.INFO + 10 * (options.quiet - options.verbose))
@@ -214,7 +234,8 @@ def main(argv):
     start = time.time()
     put_queue = JoinableQueue()
     stat_queue = JoinableQueue()
-    walker_process = Process(target=TreeWalker, args=(put_queue, args, options))
+    walker = TarWalker if options.tar else TreeWalker
+    walker_process = Process(target=walker, args=(put_queue, args, options))
     walker_process.start()
     logger.debug('started walker-%d' % walker_process.pid)
     putters = dict(add=AddPutter, offline=OfflinePutter, stupid=SimplePutter, update=UpdatePutter)
