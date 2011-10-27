@@ -85,6 +85,14 @@ To Do
 * Automatically parallelize uploads of large files by splitting into chunks.
 
 
+Related projects
+----------------
+
+* [JetS3t](http://www.jets3t.org/)
+* [s3cmd](http://s3tools.org/s3cmd)
+* [sync_media_s3](http://code.google.com/p/django-command-extensions/wiki/sync_media_s3)
+
+
 Licence
 -------
 
