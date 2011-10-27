@@ -82,6 +82,13 @@ To Do
 
 * Add some help text to `--help` option.
 
+* Add gzip compression.
+
+* Add direct reading of data from uncompressed tar files in putters with
+  file handle cache.
+
+* Set content type.
+
 * Automatically parallelize uploads of large files by splitting into chunks.
 
 
