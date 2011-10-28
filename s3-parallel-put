@@ -58,19 +58,24 @@ class Walker(object):
 class TarWalker(Walker):
 
     def walk(self, source):
-        if tarfile.is_tarfile(source):
+        try:
+            tf = tarfile.open(source, 'r:')
+            for tarinfo in tf:
+                if tarinfo.isfile():
+                    path = tarinfo.name
+                    key_name = os.path.normpath(os.path.join(self.options.destination, path))
+                    filename = source
+                    offset = tarinfo.offset_data
+                    size = tarinfo.size
+                    yield(dict(filename=source, key_name=key_name, offset=offset, path=path, size=size))
+        except tarfile.ReadError:
             tf = tarfile.open(source)
-            try:
-                for tarinfo in tf:
-                    if tarinfo.isfile():
-                        path = tarinfo.name
-                        key_name = os.path.normpath(os.path.join(self.options.destination, path))
-                        content = tf.extractfile(tarinfo).read()
-                        yield dict(content=content, key_name=key_name, path=path)
-            finally:
-                tf.close()
-        else:
-            self.logger.error('%r is not a tar file' % source)
+            for tarinfo in tf:
+                if tarinfo.isfile():
+                    path = tarinfo.name
+                    key_name = os.path.normpath(os.path.join(self.options.destination, path))
+                    content = tf.extractfile(tarinfo).read()
+                    yield dict(content=content, key_name=key_name, path=path)
 
 
 class TreeWalker(Walker):
@@ -111,11 +116,11 @@ class SimplePutter(object):
             self.put_queue.task_done()
         self.logger.debug('terminating')
 
-    def handle(self, content=None, key_name=None, path=None):
+    def handle(self, key_name=None, **kwargs):
         key = self.bucket.new_key(key_name)
-        self.put(key, content=content, path=path)
+        self.put(key, **kwargs)
 
-    def put(self, key, content=None, fp=None, md5=None, path=None):
+    def put(self, key, content=None, filename=None, fp=None, md5=None, offset=None, path=None, size=None):
         if content:
             if not self.options.dry_run:
                 key.set_contents_from_string(content, md5=md5)
@@ -124,6 +129,15 @@ class SimplePutter(object):
             if not self.options.dry_run:
                 key.set_contents_from_file(fp, md5=md5)
             size = os.fstat(fp.fileno()).st_size
+        elif filename:
+            if not self.options.dry_run:
+                with open(filename) as fp:
+                    fp.seek(offset)
+                    content = fp.read(size)
+                    try:
+                        key.set_contents_from_string(m[delta:], md5=md5)
+                    finally:
+                        m.close()
         elif path:
             if self.options.dry_run:
                 size = os.stat(path).st_size
@@ -139,19 +153,21 @@ class SimplePutter(object):
 
 class AddPutter(SimplePutter):
 
-    def handle(self, content=None, key_name=None, path=None):
+    def handle(self, key_name=None, path=None, **kwargs):
         key = self.bucket.get_key(key_name)
         if key is None:
             key = self.bucket.new_key(key_name)
-            self.put(key, content=content, path=path)
+            self.put(key, path=path, **kwargs)
         else:
             self.logger.info('skipping %r -> %r (key exists)' % (path, key_name))
 
 
 class OfflinePutter(SimplePutter):
 
-    def handle(self, content=None, key_name=None, path=None):
-        if content:
+    def handle(self, content=None, key_name=None, path=None, size=None, **kwargs):
+        if size is not None:
+            pass
+        elif content:
             size = len(content)
         else:
             size = os.stat(path).st_size
@@ -161,17 +177,26 @@ class OfflinePutter(SimplePutter):
 
 class UpdatePutter(SimplePutter):
 
-    def handle(self, content=None, key_name=None, path=None):
+    def handle(self, content=None, filename=None, key_name=None, offset=None, path=None, size=None, **kwargs):
         key = self.bucket.get_key(key_name)
         if key is None:
             key = self.bucket.new_key(key_name)
-            self.put(key, content=content, path=path)
+            self.put(key, content=content, path=path, **kwargs)
         elif content:
             md5 = hashlib.md5(content).hexdigest()
             if key.etag == '"%s"' % md5:
                 self.logger.info('skipping %r -> %r (value unchanged)' % (path, key_name))
             else:
-                self.put(key, content=content, md5=key.get_md5_from_hexdigest(md5), path=path)
+                self.put(key, content=content, md5=key.get_md5_from_hexdigest(md5), path=path, **kwargs)
+        elif filename:
+            with open(filename) as fp:
+                fp.seek(offset)
+                content = fp.read(size)
+                md5 = hashlib.md5(content).hexdigest()
+                if key.etag == '"%s"' % md5:
+                    self.logger.info('skipping %r -> %r (value unchanged)' % (path, key_name))
+                else:
+                    self.put(key, content=content, md5=key.get_md5_from_hexdigest(md5), path=path, **kwargs)
         elif path:
             with open(path) as fp:
                 md5 = key.compute_md5(fp)
