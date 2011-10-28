@@ -247,7 +247,7 @@ def main(argv):
         del bucket
         del connection
     start = time.time()
-    put_queue = JoinableQueue()
+    put_queue = JoinableQueue(1024 * options.processes)
     stat_queue = JoinableQueue()
     walker = TarWalker if options.tar else TreeWalker
     walker_process = Process(target=walker, args=(put_queue, args, options))
