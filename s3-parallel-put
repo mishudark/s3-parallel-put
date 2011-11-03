@@ -140,7 +140,6 @@ class TreeWalker(Walker):
 
 def add_heuristic(self, key_name, value):
     key = bucket.get_key(key_name)
-    print repr(key.__dict__)
     if key is None:
         return bucket.new_key(key_name)
     else:
