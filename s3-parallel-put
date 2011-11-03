@@ -50,7 +50,7 @@ class Value(object):
                     self.content = fp.read(self.size)
             elif self.path:
                 with open(self.path) as fp:
-                    self.content = fp.read(size)
+                    self.content = fp.read(self.size)
             else:
                 assert False
         return self.content
@@ -62,10 +62,10 @@ class Value(object):
 
     def get_size(self):
         if self.size is None:
-            if content:
-                self.size = len(content)
-            elif path:
-                self.size = os.stat(path).st_size
+            if self.content:
+                self.size = len(self.content)
+            elif self.path:
+                self.size = os.stat(self.path).st_size
             else:
                 assert False
         return self.size
@@ -111,7 +111,7 @@ class TarWalker(Walker):
                     filename = source
                     offset = tarinfo.offset_data
                     size = tarinfo.size
-                    yield (key_name, dict(filename=source, offset=offset, path=path, size=size))
+                    yield (key_name, dict(filename=filename, offset=offset, path=path, size=size))
         except tarfile.ReadError:
             tf = tarfile.open(source)
             for tarinfo in tf:
@@ -139,9 +139,9 @@ class TreeWalker(Walker):
 
 
 def add_heuristic(self, key_name, value):
-    key = bucket.get_key(key_name)
+    key = self.bucket.get_key(key_name)
     if key is None:
-        return bucket.new_key(key_name)
+        return self.bucket.new_key(key_name)
     else:
         return None
 
