@@ -75,7 +75,7 @@ class Value(object):
         return self.size
 
 
-class Done(Exception):
+class LimitReached(Exception):
     pass
 
 
@@ -101,10 +101,10 @@ class Walker(object):
                     if key_name in done:
                         continue
                     if limit == 0:
-                        raise Done
+                        raise LimitReached
                     limit -= 1
                     put_queue.put((key_name, args))
-        except Done:
+        except LimitReached:
             pass
         self.logger.debug('terminating')
 
