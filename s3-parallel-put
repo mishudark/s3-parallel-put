@@ -260,6 +260,8 @@ def main(argv):
             help='resume from log file')
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Logging options')
+    group.add_option('--log-filename', metavar='FILENAME',
+            help='set log filename')
     group.add_option('--quiet', '-q', action='count', default=0,
             help='less output')
     group.add_option('--verbose', '-v', action='count', default=0,
@@ -274,7 +276,7 @@ def main(argv):
             help='set number of putter processes')
     parser.add_option_group(group)
     options, args = parser.parse_args(argv[1:])
-    logging.basicConfig(level=logging.INFO + 10 * (options.quiet - options.verbose))
+    logging.basicConfig(filename=options.log_filename, level=logging.INFO + 10 * (options.quiet - options.verbose))
     logger = logging.getLogger(os.path.basename(sys.argv[0]))
     if len(args) < 1:
         logger.error('missing source operand')
