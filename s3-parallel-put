@@ -126,6 +126,8 @@ class TarWalker(Walker):
                     offset = tarinfo.offset_data
                     size = tarinfo.size
                     yield (key_name, dict(filename=filename, offset=offset, path=path, size=size))
+                # http://blogs.oucs.ox.ac.uk/inapickle/2011/06/20/high-memory-usage-when-using-pythons-tarfile-module/
+                tf.members = []
         except tarfile.ReadError:
             tf = tarfile.open(source)
             for tarinfo in tf:
