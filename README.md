@@ -18,11 +18,11 @@ The program reads your credentials from the environment variables
 `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 
 ```bash
-s3-parallel-put --bucket=BUCKET --destination=DESTINATION SOURCE
+s3-parallel-put --bucket=BUCKET --prefix=PREFIX SOURCE
 ```
 
-Keys are computed by combining `DESTINATION` with the path of the file,
-starting from `SOURCE`.  Values are file contents.
+Keys are computed by combining `PREFIX` with the path of the file, starting
+from `SOURCE`.  Values are file contents.
 
 There are a few other options:
 
@@ -43,13 +43,16 @@ or not.  Valid modes are:
 * `update` set the key's content if the key is not already present and it's
   content has changed (as determined by its ETag).
 
-* `offline` do not connect to S3, primarily for debugging.
-
 The default mode is `update`.  If you know that the keys are not already
 present then `stupid` is fastest (it avoids an extra HEAD request for each
 key).  If you know that some keys are already present and that they have the
 correct values, then `add` is faster than `update` (it avoids calculating
 the MD5 sum of the content on the client side).
+
+`--content-type=CONTENT-TYPE` sets the `Content-Type` header.
+
+`--gzip` compresses all values and sets the `Content-Encoding` header to
+`gzip`.
 
 `--processes=N` sets the number of parallel upload processes.
 
@@ -74,18 +77,13 @@ Architecture
 Bugs
 ----
 
-* Absolutely no error checking whatsoever.
+* Limited error checking.
 
 
 To Do
 -----
 
-* Add gzip compression.
-
-* Add direct reading of data from uncompressed tar files in putters with
-  file handle cache.
-
-* Set content type.
+* Update documentation.
 
 * Automatically parallelize uploads of large files by splitting into chunks.
 
