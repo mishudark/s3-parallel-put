@@ -23,7 +23,7 @@ from gzip import GzipFile
 import hashlib
 import logging
 from multiprocessing import JoinableQueue, Process, current_process
-from optparse import OptionParser
+from optparse import OptionGroup, OptionParser
 import os.path
 import re
 from ssl import SSLError
@@ -235,34 +235,44 @@ def statter(stat_queue, start, options):
 
 def main(argv):
     parser = OptionParser()
-    parser.add_option('--bucket', '-b', metavar='BUCKET',
+    group = OptionGroup(parser, 'S3 options')
+    group.add_option('--bucket', metavar='BUCKET',
             help='set bucket')
-    parser.add_option('--content-type', '-c', metavar='CONTENT-TYPE',
-            help='set content type')
-    parser.add_option('--destination', '-d', metavar='DESTINATION',
-            help='set destination')
-    parser.add_option('--dry-run', action='store_true',
-            help='don\'t write to S3')
-    parser.add_option('--gzip', action='store_true',
-            help='gzip values and set content encoding')
-    parser.add_option('--insecure', action='store_false', dest='secure',
+    group.add_option('--insecure', action='store_false', dest='secure',
             help='use insecure connection')
-    parser.add_option('--limit', default=-1, metavar='N', type=int,
-            help='set maximum number of keys to set')
-    parser.add_option('--mode', choices=('add', 'stupid', 'update'), default='update', metavar='MODE',
-            help='set mode (add, stupid, or update)')
-    parser.add_option('--processes', '-p', default=8, metavar='PROCESSES', type=int,
-            help='set number of processes')
-    parser.add_option('--quiet', '-q', action='count', default=0,
-            help='less output')
-    parser.add_option('--resume', action='append', default=[], metavar='FILENAME',
-            help='resume from log file')
-    parser.add_option('--secure', action='store_true', default=True, dest='secure',
+    group.add_option('--secure', action='store_true', default=True, dest='secure',
             help='use secure connection')
-    parser.add_option('--tar', action='store_true',
+    parser.add_option_group(group)
+    group = OptionGroup(parser, 'Source options')
+    group.add_option('--tar', action='store_true',
             help='treat sources as tar files')
-    parser.add_option('--verbose', '-v', action='count', default=0,
+    parser.add_option_group(group)
+    group = OptionGroup(parser, 'Put options')
+    group.add_option('--content-type', metavar='CONTENT-TYPE',
+            help='set content type')
+    group.add_option('--gzip', action='store_true',
+            help='gzip values and set content encoding')
+    group.add_option('--destination', metavar='DESTINATION',
+            help='set destination')
+    group.add_option('--mode', choices=('add', 'stupid', 'update'), default='update', metavar='MODE',
+            help='set mode (add, stupid, or update)')
+    group.add_option('--resume', action='append', default=[], metavar='FILENAME',
+            help='resume from log file')
+    parser.add_option_group(group)
+    group = OptionGroup(parser, 'Logging options')
+    group.add_option('--quiet', '-q', action='count', default=0,
+            help='less output')
+    group.add_option('--verbose', '-v', action='count', default=0,
             help='more output')
+    parser.add_option_group(group)
+    group = OptionGroup(parser, 'Debug and performance tuning options')
+    group.add_option('--dry-run', action='store_true',
+            help='don\'t write to S3')
+    group.add_option('--limit', default=-1, metavar='N', type=int,
+            help='set maximum number of keys to put')
+    group.add_option('--processes', default=8, metavar='PROCESSES', type=int,
+            help='set number of putter processes')
+    parser.add_option_group(group)
     options, args = parser.parse_args(argv[1:])
     logging.basicConfig(level=logging.INFO + 10 * (options.quiet - options.verbose))
     logger = logging.getLogger(os.path.basename(sys.argv[0]))
