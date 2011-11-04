@@ -25,11 +25,15 @@ import logging
 from multiprocessing import JoinableQueue, Process, current_process
 from optparse import OptionParser
 import os.path
+import re
 import sys
 import tarfile
 import time
 
 from boto.s3.connection import S3Connection
+
+
+DONE_RE = re.compile(r'\AINFO:s3-parallel-put\[putter-\d+\]:\S+\s+->\s+(\S+)\s*\Z')
 
 
 class Value(object):
@@ -83,14 +87,23 @@ class Walker(object):
         self.options = options
         self.logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
         self.logger.debug('starting')
+        done = set()
+        for filename in options.done:
+            with open(filename) as fp:
+                for line in fp:
+                    m = DONE_RE.match(line)
+                    if m:
+                        done.add(m.group(1))
         limit = self.options.limit
         try:
             for source in sources:
-                for args in self.walk(source):
+                for key_name, args in self.walk(source):
+                    if key_name in done:
+                        continue
                     if limit == 0:
                         raise Done
                     limit -= 1
-                    put_queue.put(args)
+                    put_queue.put((key_name, args))
         except Done:
             pass
         self.logger.debug('terminating')
@@ -217,6 +230,7 @@ def main(argv):
     parser.add_option('--bucket', '-b', metavar='BUCKET')
     parser.add_option('--content-type', '-c', metavar='CONTENT-TYPE')
     parser.add_option('--destination', '-d', metavar='DESTINATION')
+    parser.add_option('--done', action='append', default=[], metavar='FILENAME')
     parser.add_option('--dry-run', action='store_true')
     parser.add_option('--gzip', action='store_true')
     parser.add_option('--insecure', action='store_false', dest='secure')
