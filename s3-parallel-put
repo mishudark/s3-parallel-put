@@ -89,7 +89,7 @@ class Walker(object):
         self.logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
         self.logger.debug('starting')
         done = set()
-        for filename in options.done:
+        for filename in options.resume:
             with open(filename) as fp:
                 for line in fp:
                     m = DONE_RE.match(line)
@@ -238,7 +238,6 @@ def main(argv):
     parser.add_option('--bucket', '-b', metavar='BUCKET')
     parser.add_option('--content-type', '-c', metavar='CONTENT-TYPE')
     parser.add_option('--destination', '-d', metavar='DESTINATION')
-    parser.add_option('--done', action='append', default=[], metavar='FILENAME')
     parser.add_option('--dry-run', action='store_true')
     parser.add_option('--gzip', action='store_true')
     parser.add_option('--insecure', action='store_false', dest='secure')
@@ -246,6 +245,7 @@ def main(argv):
     parser.add_option('--mode', choices=('add', 'stupid', 'update'), default='update', metavar='MODE')
     parser.add_option('--processes', '-p', default=8, metavar='PROCESSES', type=int)
     parser.add_option('--quiet', '-q', action='count', default=0)
+    parser.add_option('--resume', action='append', default=[], metavar='FILENAME')
     parser.add_option('--secure', action='store_true', default=True, dest='secure')
     parser.add_option('--tar', action='store_true')
     parser.add_option('--verbose', '-v', action='count', default=0)
