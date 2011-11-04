@@ -26,6 +26,7 @@ from multiprocessing import JoinableQueue, Process, current_process
 from optparse import OptionParser
 import os.path
 import re
+from ssl import SSLError
 import sys
 import tarfile
 import time
@@ -176,8 +177,7 @@ def update_heuristic(bucket, key_name, value):
 def putter(heuristic, put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
-    connection = S3Connection(is_secure=options.secure)
-    bucket = connection.get_bucket(options.bucket)
+    connection, bucket = None, None
     while True:
         args = put_queue.get()
         if args is None:
@@ -185,25 +185,33 @@ def putter(heuristic, put_queue, stat_queue, options):
             break
         key_name, value_kwargs = args
         value = Value(**value_kwargs)
-        key = heuristic(bucket, key_name, value)
-        if key:
-            headers = {}
-            if options.content_type:
-                headers['Content-Type'] = options.content_type
-            content = value.get_content()
-            if options.gzip:
-                headers['Content-Encoding'] = 'gzip'
-                string_io = StringIO()
-                gzip_file = GzipFile(compresslevel=9, fileobj=string_io, mode='w')
-                gzip_file.write(content)
-                gzip_file.close()
-                content = string_io.getvalue()
-            if not options.dry_run:
-                key.set_contents_from_string(content, headers, md5=value.md5)
-            logger.info('%s -> %s' % (value.path, key.name))
-            stat_queue.put(dict(size=value.get_size()))
-        else:
-            logger.info('skipping %s -> %s' % (value.path, key_name))
+        try:
+            if connection is None:
+                connection = S3Connection(is_secure=options.secure)
+            if bucket is None:
+                bucket = connection.get_bucket(options.bucket)
+            key = heuristic(bucket, key_name, value)
+            if key:
+                headers = {}
+                if options.content_type:
+                    headers['Content-Type'] = options.content_type
+                content = value.get_content()
+                if options.gzip:
+                    headers['Content-Encoding'] = 'gzip'
+                    string_io = StringIO()
+                    gzip_file = GzipFile(compresslevel=9, fileobj=string_io, mode='w')
+                    gzip_file.write(content)
+                    gzip_file.close()
+                    content = string_io.getvalue()
+                if not options.dry_run:
+                    key.set_contents_from_string(content, headers, md5=value.md5)
+                logger.info('%s -> %s' % (value.path, key.name))
+                stat_queue.put(dict(size=value.get_size()))
+            else:
+                logger.info('skipping %s -> %s' % (value.path, key_name))
+        except SSLError as e:
+            logger.error('%s -> %s (%s)' % (value.path, key_name, e))
+            connection, bucket = None, None
         put_queue.task_done()
     logger.debug('terminating')
 
