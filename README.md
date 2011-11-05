@@ -33,7 +33,7 @@ option before transferring any real data.
 `--limit=N` causes the program to upload no more than N files.  Combined
 with `--dry-run`, this is also useful for testing.
 
-`--mode=MODE` sets the heuristic used for deciding whether to upload a file
+`--put=MODE` sets the heuristic used for deciding whether to upload a file
 or not.  Valid modes are:
 
 * `add` set the key's content if the key is not already present.
@@ -43,11 +43,11 @@ or not.  Valid modes are:
 * `update` set the key's content if the key is not already present and it's
   content has changed (as determined by its ETag).
 
-The default mode is `update`.  If you know that the keys are not already
-present then `stupid` is fastest (it avoids an extra HEAD request for each
-key).  If you know that some keys are already present and that they have the
-correct values, then `add` is faster than `update` (it avoids calculating
-the MD5 sum of the content on the client side).
+The default heuristic is `update`.  If you know that the keys are not
+already present then `stupid` is fastest (it avoids an extra HEAD request
+for each key).  If you know that some keys are already present and that they
+have the correct values, then `add` is faster than `update` (it avoids
+calculating the MD5 sum of the content on the client side).
 
 `--content-type=CONTENT-TYPE` sets the `Content-Type` header.
 

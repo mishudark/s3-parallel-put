@@ -256,8 +256,8 @@ def main(argv):
             help='set content type')
     group.add_option('--gzip', action='store_true',
             help='gzip values and set content encoding')
-    group.add_option('--mode', choices=('add', 'stupid', 'update'), default='update', metavar='MODE',
-            help='set mode (add, stupid, or update)')
+    group.add_option('--put', choices=('add', 'stupid', 'update'), default='update', metavar='MODE',
+            help='set put mode (add, stupid, or update)')
     group.add_option('--prefix', default='', metavar='PREFIX',
             help='set key prefix')
     group.add_option('--resume', action='append', default=[], metavar='FILENAME',
@@ -299,7 +299,7 @@ def main(argv):
     walker_process = Process(target=walker, args=(walk, put_queue, args, options))
     walker_process.start()
     logger.debug('started walker-%d' % walker_process.pid)
-    put = {'add': put_add, 'stupid': put_stupid, 'update': put_update}[options.mode]
+    put = {'add': put_add, 'stupid': put_stupid, 'update': put_update}[options.put]
     putter_processes = [Process(target=putter, args=(put, put_queue, stat_queue, options)) for i in xrange(options.processes)]
     for putter_process in putter_processes:
         putter_process.start()
