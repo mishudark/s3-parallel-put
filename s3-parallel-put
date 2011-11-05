@@ -242,8 +242,8 @@ def main(argv):
             help='use secure connection')
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Source options')
-    group.add_option('--tar', action='store_true',
-            help='treat sources as tar files')
+    group.add_option('--walk', choices=('filesystem', 'tar'), default='filesystem', metavar='MODE',
+            help='set walk mode (filesystem or tar)')
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Put options')
     group.add_option('--content-type', metavar='CONTENT-TYPE',
@@ -289,7 +289,7 @@ def main(argv):
     start = time.time()
     put_queue = JoinableQueue(1024 * options.processes)
     stat_queue = JoinableQueue()
-    walk = walk_tar if options.tar else walk_filesystem
+    walk = {'filesystem': walk_filesystem, 'tar': walk_tar}[options.walk]
     walker_process = Process(target=walker, args=(walk, put_queue, args, options))
     walker_process.start()
     put = {'add': put_add, 'stupid': put_stupid, 'update': put_update}[options.put]
