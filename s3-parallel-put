@@ -154,7 +154,7 @@ def walker(walk, put_queue, sources, options):
     logger.debug('terminating')
 
 
-def add_heuristic(bucket, key_name, value):
+def put_add(bucket, key_name, value):
     key = bucket.get_key(key_name)
     if key is None:
         return bucket.new_key(key_name)
@@ -162,11 +162,11 @@ def add_heuristic(bucket, key_name, value):
         return None
 
 
-def stupid_heuristic(bucket, key_name, value):
+def put_stupid(bucket, key_name, value):
     return bucket.new_key(key_name)
 
 
-def update_heuristic(bucket, key_name, value):
+def put_update(bucket, key_name, value):
     key = bucket.get_key(key_name)
     if key is None:
         return bucket.new_key(key_name)
@@ -176,7 +176,7 @@ def update_heuristic(bucket, key_name, value):
         else:
             return key
 
-def putter(heuristic, put_queue, stat_queue, options):
+def putter(put, put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
     connection, bucket = None, None
@@ -193,7 +193,7 @@ def putter(heuristic, put_queue, stat_queue, options):
                 connection = S3Connection(is_secure=options.secure)
             if bucket is None:
                 bucket = connection.get_bucket(options.bucket)
-            key = heuristic(bucket, key_name, value)
+            key = put(bucket, key_name, value)
             if key:
                 headers = {}
                 if options.content_type:
@@ -299,8 +299,8 @@ def main(argv):
     walker_process = Process(target=walker, args=(walk, put_queue, args, options))
     walker_process.start()
     logger.debug('started walker-%d' % walker_process.pid)
-    heuristics = dict(add=add_heuristic, stupid=stupid_heuristic, update=update_heuristic)
-    putter_processes = [Process(target=putter, args=(heuristics[options.mode], put_queue, stat_queue, options)) for i in xrange(options.processes)]
+    put = {'add': put_add, 'stupid': put_stupid, 'update': put_update}[options.mode]
+    putter_processes = [Process(target=putter, args=(put, put_queue, stat_queue, options)) for i in xrange(options.processes)]
     for putter_process in putter_processes:
         putter_process.start()
         logger.debug('started putter-%d' % putter_process.pid)
