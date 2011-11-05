@@ -136,7 +136,6 @@ def walk_tar(source, options):
 
 def walker(walk, put_queue, sources, options):
     logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
-    logger.debug('starting')
     pairs = chain(*imap(lambda source: walk(source, options), sources))
     if options.resume:
         done = set()
@@ -151,7 +150,6 @@ def walker(walk, put_queue, sources, options):
         pairs = islice(pairs, options.limit)
     for pair in pairs:
         put_queue.put(pair)
-    logger.debug('terminating')
 
 
 def put_add(bucket, key_name, value):
@@ -178,7 +176,6 @@ def put_update(bucket, key_name, value):
 
 def putter(put, put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
-    logger.debug('starting')
     connection, bucket = None, None
     file_object_cache = FileObjectCache()
     while True:
@@ -217,12 +214,10 @@ def putter(put, put_queue, stat_queue, options):
             put_queue.put((key_name, args))
             connection, bucket = None, None
         put_queue.task_done()
-    logger.debug('terminating')
 
 
 def statter(stat_queue, start, options):
     logger = logging.getLogger('%s[statter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
-    logger.debug('starting')
     count, total_size = 0, 0
     while True:
         kwargs = stat_queue.get()
@@ -234,7 +229,6 @@ def statter(stat_queue, start, options):
         stat_queue.task_done()
     duration = time.time() - start
     logger.info('put %d bytes in %d files in %.1f seconds (%d bytes/s, %.1f files/s)' % (total_size, count, duration, total_size / duration, count / duration))
-    logger.debug('terminating')
 
 
 def main(argv):
@@ -298,32 +292,22 @@ def main(argv):
     walk = walk_tar if options.tar else walk_filesystem
     walker_process = Process(target=walker, args=(walk, put_queue, args, options))
     walker_process.start()
-    logger.debug('started walker-%d' % walker_process.pid)
     put = {'add': put_add, 'stupid': put_stupid, 'update': put_update}[options.put]
     putter_processes = [Process(target=putter, args=(put, put_queue, stat_queue, options)) for i in xrange(options.processes)]
     for putter_process in putter_processes:
         putter_process.start()
-        logger.debug('started putter-%d' % putter_process.pid)
     statter_process = Process(target=statter, args=(stat_queue, start, options))
     statter_process.start()
-    logger.debug('started statter-%d' % statter_process.pid)
-    logger.debug('joining walker-%d' % walker_process.pid)
     walker_process.join()
-    logger.debug('shutting down put_queue')
     for putter_process in putter_processes:
         put_queue.put(None)
     put_queue.close()
     for putter_process in putter_processes:
-        logger.debug('joining putter-%d' % putter_process.pid)
         putter_process.join()
-    logger.debug('shutting down stat_queue')
     stat_queue.put(None)
     stat_queue.close()
-    logger.debug('joining statter-%d' % walker_process.pid)
     statter_process.join()
-    logger.debug('joining put_queue')
     put_queue.join_thread()
-    logger.debug('joining stat_queue')
     stat_queue.join_thread()
 
 
