@@ -42,16 +42,16 @@ class FileObjectCache(object):
 
     def __init__(self):
         self.name = None
-        self.fp = None
+        self.file_object = None
 
     def open(self, name, *args):
         if name != self.name:
             self.name = name
-            self.fp = open(self.name, *args)
+            self.file_object = open(self.name, *args)
         return self
 
     def __enter__(self):
-        return self.fp
+        return self.file_object
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
@@ -71,12 +71,12 @@ class Value(object):
     def get_content(self):
         if self.content is None:
             if self.filename:
-                with self.file_object_cache.open(self.filename) as fp:
-                    fp.seek(self.offset)
-                    self.content = fp.read(self.size)
+                with self.file_object_cache.open(self.filename) as file_object:
+                    file_object.seek(self.offset)
+                    self.content = file_object.read(self.size)
             elif self.path:
-                with open(self.path) as fp:
-                    self.content = fp.read(self.size)
+                with open(self.path) as file_object:
+                    self.content = file_object.read(self.size)
             else:
                 assert False
         return self.content
@@ -113,8 +113,8 @@ def walk_filesystem(source, options):
 
 def walk_tar(source, options):
     try:
-        tf = tarfile.open(source, 'r:')
-        for tarinfo in tf:
+        tar_file = tarfile.open(source, 'r:')
+        for tarinfo in tar_file:
             if tarinfo.isfile():
                 path = tarinfo.name
                 key_name = os.path.normpath(os.path.join(options.prefix, path))
@@ -123,14 +123,14 @@ def walk_tar(source, options):
                 size = tarinfo.size
                 yield (key_name, dict(filename=filename, offset=offset, path=path, size=size))
             # http://blogs.oucs.ox.ac.uk/inapickle/2011/06/20/high-memory-usage-when-using-pythons-tarfile-module/
-            tf.members = []
+            tar_file.members = []
     except tarfile.ReadError:
-        tf = tarfile.open(source)
-        for tarinfo in tf:
+        tar_file = tarfile.open(source)
+        for tarinfo in tar_file:
             if tarinfo.isfile():
                 path = tarinfo.name
                 key_name = os.path.normpath(os.path.join(options.prefix, path))
-                content = tf.extractfile(tarinfo).read()
+                content = tar_file.extractfile(tarinfo).read()
                 yield (key_name, dict(content=content, path=path))
 
 
@@ -140,11 +140,11 @@ def walker(walk, put_queue, sources, options):
     if options.resume:
         done = set()
         for filename in options.resume:
-            with open(filename) as fp:
-                for line in fp:
-                    m = DONE_RE.match(line)
-                    if m:
-                        done.add(m.group(1))
+            with open(filename) as file_object:
+                for line in file_object:
+                    match = DONE_RE.match(line)
+                    if match:
+                        done.add(match.group(1))
         pairs = ((key_name, args) for key_name, args in pairs if key_name not in done)
     if options.limit:
         pairs = islice(pairs, options.limit)
@@ -209,8 +209,8 @@ def putter(put, put_queue, stat_queue, options):
                 stat_queue.put(dict(size=value.get_size()))
             else:
                 logger.info('skipping %s -> %s' % (value.path, key_name))
-        except SSLError as e:
-            logger.error('%s -> %s (%s)' % (value.path, key_name, e))
+        except SSLError as exc:
+            logger.error('%s -> %s (%s)' % (value.path, key_name, exc))
             put_queue.put((key_name, args))
             connection, bucket = None, None
         put_queue.task_done()
