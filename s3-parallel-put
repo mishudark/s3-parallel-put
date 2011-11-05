@@ -37,9 +37,29 @@ from boto.s3.connection import S3Connection
 DONE_RE = re.compile(r'\AINFO:s3-parallel-put\[putter-\d+\]:\S+\s+->\s+(\S+)\s*\Z')
 
 
+class FileObjectCache(object):
+
+    def __init__(self):
+        self.name = None
+        self.fp = None
+
+    def open(self, name, *args):
+        if name != self.name:
+            self.name = name
+            self.fp = open(self.name, *args)
+        return self
+
+    def __enter__(self):
+        return self.fp
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+
 class Value(object):
 
-    def __init__(self, content=None, filename=None, md5=None, offset=None, path=None, size=None):
+    def __init__(self, file_object_cache, content=None, filename=None, md5=None, offset=None, path=None, size=None):
+        self.file_object_cache = file_object_cache
         self.content = content
         self.filename = filename
         self.md5 = md5
@@ -50,7 +70,7 @@ class Value(object):
     def get_content(self):
         if self.content is None:
             if self.filename:
-                with open(self.filename) as fp:
+                with self.file_object_cache.open(self.filename) as fp:
                     fp.seek(self.offset)
                     self.content = fp.read(self.size)
             elif self.path:
@@ -180,13 +200,14 @@ def putter(heuristic, put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     logger.debug('starting')
     connection, bucket = None, None
+    file_object_cache = FileObjectCache()
     while True:
         args = put_queue.get()
         if args is None:
             put_queue.task_done()
             break
         key_name, value_kwargs = args
-        value = Value(**value_kwargs)
+        value = Value(file_object_cache, **value_kwargs)
         try:
             if connection is None:
                 connection = S3Connection(is_secure=options.secure)
