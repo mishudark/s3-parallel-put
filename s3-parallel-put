@@ -38,6 +38,11 @@ from boto.s3.connection import S3Connection
 DONE_RE = re.compile(r'\AINFO:s3-parallel-put\[putter-\d+\]:\S+\s+->\s+(\S+)\s*\Z')
 
 
+def repeatedly(func, *args, **kwargs):
+    while True:
+        yield func(*args, **kwargs)
+
+
 class FileObjectCache(object):
 
     def __init__(self):
@@ -293,7 +298,7 @@ def main(argv):
     walker_process = Process(target=walker, args=(walk, put_queue, args, options))
     walker_process.start()
     put = {'add': put_add, 'stupid': put_stupid, 'update': put_update}[options.put]
-    putter_processes = [Process(target=putter, args=(put, put_queue, stat_queue, options)) for i in xrange(options.processes)]
+    putter_processes = list(islice(repeatedly(Process, target=putter, args=(put, put_queue, stat_queue, options)), options.processes))
     for putter_process in putter_processes:
         putter_process.start()
     statter_process = Process(target=statter, args=(stat_queue, start, options))
