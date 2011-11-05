@@ -21,6 +21,7 @@ except ImportError:
     from StringIO import StringIO
 from gzip import GzipFile
 import hashlib
+from itertools import chain, imap, islice
 import logging
 from multiprocessing import JoinableQueue, Process, current_process
 from optparse import OptionGroup, OptionParser
@@ -96,18 +97,48 @@ class Value(object):
         return self.size
 
 
-class LimitReached(Exception):
-    pass
+def walk_filesystem(source, options):
+    if os.path.isdir(source):
+        for dirpath, dirnames, filenames in os.walk(source):
+            for filename in filenames:
+                path = os.path.join(dirpath, filename)
+                if not os.path.isfile(path):
+                    continue
+                key_name = os.path.normpath(os.path.join(options.prefix, path))
+                yield (key_name, dict(path=path))
+    elif os.path.isfile(source):
+        key_name = os.path.normpath(os.path.join(options.prefix, source))
+        yield (key_name, dict(path=path))
 
 
-class Walker(object):
+def walk_tar(source, options):
+    try:
+        tf = tarfile.open(source, 'r:')
+        for tarinfo in tf:
+            if tarinfo.isfile():
+                path = tarinfo.name
+                key_name = os.path.normpath(os.path.join(options.prefix, path))
+                filename = source
+                offset = tarinfo.offset_data
+                size = tarinfo.size
+                yield (key_name, dict(filename=filename, offset=offset, path=path, size=size))
+            # http://blogs.oucs.ox.ac.uk/inapickle/2011/06/20/high-memory-usage-when-using-pythons-tarfile-module/
+            tf.members = []
+    except tarfile.ReadError:
+        tf = tarfile.open(source)
+        for tarinfo in tf:
+            if tarinfo.isfile():
+                path = tarinfo.name
+                key_name = os.path.normpath(os.path.join(options.prefix, path))
+                content = tf.extractfile(tarinfo).read()
+                yield (key_name, dict(content=content, path=path))
 
-    def __init__(self, put_queue, sources, options):
-        self.put_queue = put_queue
-        self.sources = sources
-        self.options = options
-        self.logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
-        self.logger.debug('starting')
+
+def walker(walk, put_queue, sources, options):
+    logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
+    logger.debug('starting')
+    pairs = chain(*imap(lambda source: walk(source, options), sources))
+    if options.resume:
         done = set()
         for filename in options.resume:
             with open(filename) as fp:
@@ -115,69 +146,18 @@ class Walker(object):
                     m = DONE_RE.match(line)
                     if m:
                         done.add(m.group(1))
-        limit = self.options.limit
-        try:
-            for source in sources:
-                for key_name, args in self.walk(source):
-                    if key_name in done:
-                        continue
-                    if limit == 0:
-                        raise LimitReached
-                    limit -= 1
-                    put_queue.put((key_name, args))
-        except LimitReached:
-            pass
-        self.logger.debug('terminating')
-
-    def walk(self, source):
-        raise NotImplementedError
+        pairs = ((key_name, args) for key_name, args in pairs if key_name not in done)
+    if options.limit:
+        pairs = islice(pairs, options.limit)
+    for pair in pairs:
+        put_queue.put(pair)
+    logger.debug('terminating')
 
 
-class TarWalker(Walker):
-
-    def walk(self, source):
-        try:
-            tf = tarfile.open(source, 'r:')
-            for tarinfo in tf:
-                if tarinfo.isfile():
-                    path = tarinfo.name
-                    key_name = os.path.normpath(os.path.join(self.options.prefix, path))
-                    filename = source
-                    offset = tarinfo.offset_data
-                    size = tarinfo.size
-                    yield (key_name, dict(filename=filename, offset=offset, path=path, size=size))
-                # http://blogs.oucs.ox.ac.uk/inapickle/2011/06/20/high-memory-usage-when-using-pythons-tarfile-module/
-                tf.members = []
-        except tarfile.ReadError:
-            tf = tarfile.open(source)
-            for tarinfo in tf:
-                if tarinfo.isfile():
-                    path = tarinfo.name
-                    key_name = os.path.normpath(os.path.join(self.options.prefix, path))
-                    content = tf.extractfile(tarinfo).read()
-                    yield (key_name, dict(content=content, path=path))
-
-
-class TreeWalker(Walker):
-
-    def walk(self, source):
-        if os.path.isdir(source):
-            for dirpath, dirnames, filenames in os.walk(source):
-                for filename in filenames:
-                    path = os.path.join(dirpath, filename)
-                    if not os.path.isfile(path):
-                        continue
-                    key_name = os.path.normpath(os.path.join(self.options.prefix, path))
-                    yield (key_name, dict(path=path))
-        elif os.path.isfile(source):
-            key_name = os.path.normpath(os.path.join(self.options.prefix, source))
-            yield (key_name, dict(path=path))
-
-
-def add_heuristic(self, key_name, value):
-    key = self.bucket.get_key(key_name)
+def add_heuristic(bucket, key_name, value):
+    key = bucket.get_key(key_name)
     if key is None:
-        return self.bucket.new_key(key_name)
+        return bucket.new_key(key_name)
     else:
         return None
 
@@ -315,8 +295,8 @@ def main(argv):
     start = time.time()
     put_queue = JoinableQueue(1024 * options.processes)
     stat_queue = JoinableQueue()
-    walker = TarWalker if options.tar else TreeWalker
-    walker_process = Process(target=walker, args=(put_queue, args, options))
+    walk = walk_tar if options.tar else walk_filesystem
+    walker_process = Process(target=walker, args=(walk, put_queue, args, options))
     walker_process.start()
     logger.debug('started walker-%d' % walker_process.pid)
     heuristics = dict(add=add_heuristic, stupid=stupid_heuristic, update=update_heuristic)
