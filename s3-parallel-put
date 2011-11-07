@@ -273,7 +273,7 @@ def main(argv):
     group = OptionGroup(parser, 'Debug and performance tuning options')
     group.add_option('--dry-run', action='store_true',
             help='don\'t write to S3')
-    group.add_option('--limit', default=-1, metavar='N', type=int,
+    group.add_option('--limit', metavar='N', type=int,
             help='set maximum number of keys to put')
     group.add_option('--processes', default=8, metavar='PROCESSES', type=int,
             help='set number of putter processes')
