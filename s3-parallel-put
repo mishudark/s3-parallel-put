@@ -216,7 +216,7 @@ def putter(put, put_queue, stat_queue, options):
                 logger.info('skipping %s -> %s' % (value.path, key_name))
         except SSLError as exc:
             logger.error('%s -> %s (%s)' % (value.path, key_name, exc))
-            put_queue.put((key_name, args))
+            put_queue.put(args)
             connection, bucket = None, None
         put_queue.task_done()
 
