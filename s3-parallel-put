@@ -81,7 +81,7 @@ class Value(object):
                     self.content = file_object.read(self.size)
             elif self.path:
                 with open(self.path) as file_object:
-                    self.content = file_object.read(self.size)
+                    self.content = file_object.read()
             else:
                 assert False
         return self.content
