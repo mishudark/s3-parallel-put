@@ -199,7 +199,10 @@ def putter(put, put_queue, stat_queue, options):
                 bucket = connection.get_bucket(options.bucket)
             key = put(bucket, key_name, value)
             if key:
-                headers = dict(tuple(header.split(':', 1)) for header in options.headers)
+                if options.headers:
+                    headers = dict(tuple(header.split(':', 1)) for header in options.headers)
+                else:
+                    headers = {}
                 if options.content_type:
                     if options.content_type == "guess":
                         headers['Content-Type'] = mimetypes.guess_type(value.path)[0]
