@@ -49,7 +49,8 @@ for each key).  If you know that some keys are already present and that they
 have the correct values, then `add` is faster than `update` (it avoids
 calculating the MD5 sum of the content on the client side).
 
-`--content-type=CONTENT-TYPE` sets the `Content-Type` header.
+`--content-type=CONTENT-TYPE` sets the `Content-Type` header. 
+(accepted parameter `guess`), (eg. `--content-type=guess`)
 
 `--gzip` compresses all values and sets the `Content-Encoding` header to
 `gzip`.
