@@ -40,7 +40,7 @@ or not.  Valid modes are:
 
 * `stupid` always set the key's content.
 
-* `update` set the key's content if the key is not already present and it's
+* `update` set the key's content if the key is not already present and its
   content has changed (as determined by its ETag).
 
 The default heuristic is `update`.  If you know that the keys are not
