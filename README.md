@@ -8,6 +8,7 @@ executing multiple PUTs in parallel.
 Dependencies
 ------------
 
+* Python 2.X
 * [Boto](http://code.google.com/p/boto/)
 
 
