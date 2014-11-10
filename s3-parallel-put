@@ -47,6 +47,15 @@ from boto.utils import compute_md5
 
 DONE_RE = re.compile(r'\AINFO:s3-parallel-put\[putter-\d+\]:\S+\s+->\s+(\S+)\s*\Z')
 
+# These content types are amenable to compression
+GZIP_CONTENT_TYPES = (
+    'application/javascript',
+    'application/x-javascript',
+    'text/css',
+    'text/html',
+    'text/javascript',
+)
+
 
 def repeatedly(func, *args, **kwargs):
     while True:
@@ -225,7 +234,7 @@ def putter(put, put_queue, stat_queue, options):
 
                 content = value.get_content()
                 md5 = value.md5
-                if options.gzip:
+                if options.gzip and content_type in GZIP_CONTENT_TYPES:
                     headers['Content-Encoding'] = 'gzip'
                     string_io = StringIO()
                     gzip_file = GzipFile(compresslevel=9, fileobj=string_io, mode='w')
