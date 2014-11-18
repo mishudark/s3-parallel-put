@@ -248,8 +248,9 @@ def putter(put, put_queue, stat_queue, options):
 
                 content = value.get_content()
                 md5 = value.md5
-                should_gzip = options.gzip and (content_type in gzip_content_types
-                    or gzip_content_types == GZIP_ALL)
+                should_gzip = options.gzip and (
+                    content_type and content_type in gzip_content_types or
+                    gzip_content_types == GZIP_ALL)
                 if should_gzip:
                     headers['Content-Encoding'] = 'gzip'
                     string_io = StringIO()
