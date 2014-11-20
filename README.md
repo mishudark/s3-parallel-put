@@ -53,8 +53,13 @@ calculating the MD5 sum of the content on the client side).
 `--content-type=CONTENT-TYPE` sets the `Content-Type` header. 
 (accepted parameter `guess`), (eg. `--content-type=guess`)
 
-`--gzip` compresses all values and sets the `Content-Encoding` header to
+`--gzip` compresses common text files and sets the `Content-Encoding` header to
 `gzip`.
+
+`--gzip-type=CONTENT-TYPE` can be used multiple times to specify what content
+types should be gzipped.  To extend the existing set, specify `guess` too, (eg.
+`--gzip-type=guess --gzip-type="image/svg+xml").  To gzip everything, specify
+`all`, (eg. `--gzip-type=all`).
 
 `--processes=N` sets the number of parallel upload processes.
 
