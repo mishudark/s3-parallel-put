@@ -47,6 +47,17 @@ from boto.utils import compute_md5
 
 DONE_RE = re.compile(r'\AINFO:s3-parallel-put\[putter-\d+\]:\S+\s+->\s+(\S+)\s*\Z')
 
+# These content types are amenable to compression
+# WISHLIST more types means more internets
+GZIP_CONTENT_TYPES = (
+    'application/javascript',
+    'application/x-javascript',
+    'text/css',
+    'text/html',
+    'text/javascript',
+)
+GZIP_ALL = 'all'
+
 
 def repeatedly(func, *args, **kwargs):
     while True:
@@ -196,6 +207,18 @@ def putter(put, put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     connection, bucket = None, None
     file_object_cache = FileObjectCache()
+    # Figure out what content types we want to gzip
+    if not options.gzip_type:  # default
+        gzip_content_types = GZIP_CONTENT_TYPES
+    elif 'all' in options.gzip_type:
+        gzip_content_types = GZIP_ALL
+    else:
+        gzip_content_types = options.gzip_type
+    if 'guess' in gzip_content_types:
+        # don't bother removing 'guess' from the list since nothing will match it
+        gzip_content_types.extend(GZIP_CONTENT_TYPES)
+    if options.gzip:
+        logger.debug('These content types will be gzipped: %s' % unicode(gzip_content_types))
     while True:
         args = put_queue.get()
         if args is None:
@@ -214,15 +237,21 @@ def putter(put, put_queue, stat_queue, options):
                     headers = dict(tuple(header.split(':', 1)) for header in options.headers)
                 else:
                     headers = {}
+
+                content_type = None
                 if options.content_type:
                     if options.content_type == "guess":
-                        headers['Content-Type'] = mimetypes.guess_type(value.path)[0]
+                        content_type = mimetypes.guess_type(value.path)[0]
                     else:
-                        headers['Content-Type'] = options.content_type
+                        content_type = options.content_type
+                    headers['Content-Type'] = content_type
 
                 content = value.get_content()
                 md5 = value.md5
-                if options.gzip:
+                should_gzip = options.gzip and (
+                    content_type and content_type in gzip_content_types or
+                    gzip_content_types == GZIP_ALL)
+                if should_gzip:
                     headers['Content-Encoding'] = 'gzip'
                     string_io = StringIO()
                     gzip_file = GzipFile(compresslevel=9, fileobj=string_io, mode='w')
@@ -232,7 +261,8 @@ def putter(put, put_queue, stat_queue, options):
                     md5 = compute_md5(StringIO(content))
                 if not options.dry_run:
                     key.set_contents_from_string(content, headers, md5=md5, policy=options.grant)
-                logger.info('%s -> %s' % (value.path, key.name))
+                logger.info('%s %s> %s' % (
+                    value.path, 'z' if should_gzip else '-', key.name))
                 stat_queue.put(dict(size=value.get_size()))
             else:
                 logger.info('skipping %s -> %s' % (value.path, key_name))
@@ -279,6 +309,11 @@ def main(argv):
             help='set content type, set to "guess" to guess based on file name')
     group.add_option('--gzip', action='store_true',
             help='gzip values and set content encoding')
+    group.add_option('--gzip-type', action='append', default=[],
+            help='if --gzip is set, sets what content-type to gzip, defaults '
+            'to a list of known text content types, "all" will gzip everything.'
+            ' Specify multiple times for multiple content types. '
+            '[default: "guess"]')
     group.add_option('--put', choices=('add', 'stupid', 'update'), default='update', metavar='MODE',
             help='set put mode (add, stupid, or update)')
     group.add_option('--prefix', default='', metavar='PREFIX',
