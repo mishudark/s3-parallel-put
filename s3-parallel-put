@@ -85,7 +85,7 @@ class FileObjectCache(object):
 
 class Value(object):
 
-    def __init__(self, file_object_cache, content=None, filename=None, md5=None, offset=None, path=None, size=None):
+    def __init__(self, file_object_cache, content=None, filename=None, md5=None, offset=None, path=None, size=None, bucket_name=None):
         self.file_object_cache = file_object_cache
         self.content = content
         self.filename = filename
@@ -93,6 +93,7 @@ class Value(object):
         self.offset = offset
         self.path = path
         self.size = size
+        self.bucket_name = bucket_name
 
     def get_content(self):
         if self.content is None:
@@ -121,6 +122,9 @@ class Value(object):
             else:
                 assert False
         return self.size
+
+    def should_copy_content(self):
+        return self.bucket_name is None
 
 
 def walk_filesystem(source, options):
@@ -158,6 +162,18 @@ def walk_tar(source, options):
                 key_name = os.path.normpath(os.path.join(options.prefix, path))
                 content = tar_file.extractfile(tarinfo).read()
                 yield (key_name, dict(content=content, path=path))
+
+
+def walk_s3(source, options):
+    connection = S3Connection(host=options.host, is_secure=options.secure)
+    for key in connection.get_bucket(source).list():
+        yield (
+            key.name,
+            dict(
+                bucket_name=key.bucket.name,
+                md5=key.etag,
+                size=key.size,
+                path='%s/%s' % (source, key.name)))
 
 
 def walker(walk, put_queue, sources, options):
@@ -203,6 +219,10 @@ def put_update(bucket, key_name, value):
             return key
 
 
+def put_copy(bucket, key_name, value):
+    return bucket.copy_key(key_name, value.bucket_name, key_name)
+
+
 def putter(put, put_queue, stat_queue, options):
     logger = logging.getLogger('%s[putter-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
     connection, bucket = None, None
@@ -226,6 +246,7 @@ def putter(put, put_queue, stat_queue, options):
             break
         key_name, value_kwargs = args
         value = Value(file_object_cache, **value_kwargs)
+        should_gzip = False
         try:
             if connection is None:
                 connection = S3Connection(is_secure=options.secure, host=options.host)
@@ -233,34 +254,35 @@ def putter(put, put_queue, stat_queue, options):
                 bucket = connection.get_bucket(options.bucket)
             key = put(bucket, key_name, value)
             if key:
-                if options.headers:
-                    headers = dict(tuple(header.split(':', 1)) for header in options.headers)
-                else:
-                    headers = {}
-
-                content_type = None
-                if options.content_type:
-                    if options.content_type == "guess":
-                        content_type = mimetypes.guess_type(value.path)[0]
+                if value.should_copy_content():
+                    if options.headers:
+                        headers = dict(tuple(header.split(':', 1)) for header in options.headers)
                     else:
-                        content_type = options.content_type
-                    headers['Content-Type'] = content_type
+                        headers = {}
 
-                content = value.get_content()
-                md5 = value.md5
-                should_gzip = options.gzip and (
-                    content_type and content_type in gzip_content_types or
-                    gzip_content_types == GZIP_ALL)
-                if should_gzip:
-                    headers['Content-Encoding'] = 'gzip'
-                    string_io = StringIO()
-                    gzip_file = GzipFile(compresslevel=9, fileobj=string_io, mode='w')
-                    gzip_file.write(content)
-                    gzip_file.close()
-                    content = string_io.getvalue()
-                    md5 = compute_md5(StringIO(content))
-                if not options.dry_run:
-                    key.set_contents_from_string(content, headers, md5=md5, policy=options.grant)
+                    content_type = None
+                    if options.content_type:
+                        if options.content_type == "guess":
+                            content_type = mimetypes.guess_type(value.path)[0]
+                        else:
+                            content_type = options.content_type
+                        headers['Content-Type'] = content_type
+
+                    content = value.get_content()
+                    md5 = value.md5
+                    should_gzip = options.gzip and (
+                        content_type and content_type in gzip_content_types or
+                        gzip_content_types == GZIP_ALL)
+                    if should_gzip:
+                        headers['Content-Encoding'] = 'gzip'
+                        string_io = StringIO()
+                        gzip_file = GzipFile(compresslevel=9, fileobj=string_io, mode='w')
+                        gzip_file.write(content)
+                        gzip_file.close()
+                        content = string_io.getvalue()
+                        md5 = compute_md5(StringIO(content))
+                    if not options.dry_run:
+                        key.set_contents_from_string(content, headers, md5=md5, policy=options.grant)
                 logger.info('%s %s> %s' % (
                     value.path, 'z' if should_gzip else '-', key.name))
                 stat_queue.put(dict(size=value.get_size()))
@@ -303,7 +325,7 @@ def main(argv):
             help='use secure connection')
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Source options')
-    group.add_option('--walk', choices=('filesystem', 'tar'), default='filesystem', metavar='MODE',
+    group.add_option('--walk', choices=('filesystem', 'tar', 's3'), default='filesystem', metavar='MODE',
             help='set walk mode (filesystem or tar)')
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Put options')
@@ -316,8 +338,8 @@ def main(argv):
             'to a list of known text content types, "all" will gzip everything.'
             ' Specify multiple times for multiple content types. '
             '[default: "guess"]')
-    group.add_option('--put', choices=('add', 'stupid', 'update'), default='update', metavar='MODE',
-            help='set put mode (add, stupid, or update)')
+    group.add_option('--put', choices=('add', 'stupid', 'update', 'copy'), default='update', metavar='MODE',
+            help='set put mode (add, stupid, copy or update)')
     group.add_option('--prefix', default='', metavar='PREFIX',
             help='set key prefix')
     group.add_option('--resume', action='append', default=[], metavar='FILENAME',
@@ -360,10 +382,10 @@ def main(argv):
     start = time.time()
     put_queue = JoinableQueue(1024 * options.processes)
     stat_queue = JoinableQueue()
-    walk = {'filesystem': walk_filesystem, 'tar': walk_tar}[options.walk]
+    walk = {'filesystem': walk_filesystem, 'tar': walk_tar, 's3': walk_s3}[options.walk]
     walker_process = Process(target=walker, args=(walk, put_queue, args, options))
     walker_process.start()
-    put = {'add': put_add, 'stupid': put_stupid, 'update': put_update}[options.put]
+    put = {'add': put_add, 'stupid': put_stupid, 'update': put_update, 'copy': put_copy}[options.put]
     putter_processes = list(islice(repeatedly(Process, target=putter, args=(put, put_queue, stat_queue, options)), options.processes))
     for putter_process in putter_processes:
         putter_process.start()
