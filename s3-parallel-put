@@ -332,7 +332,7 @@ def main(argv):
             help='set walk mode (filesystem or tar)')
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Put options')
-    group.add_option('--content-type', metavar='CONTENT-TYPE',
+    group.add_option('--content-type', default='guess', metavar='CONTENT-TYPE',
             help='set content type, set to "guess" to guess based on file name')
     group.add_option('--gzip', action='store_true',
             help='gzip values and set content encoding')
