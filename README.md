@@ -58,7 +58,7 @@ calculating the MD5 sum of the content on the client side).
 
 `--gzip-type=CONTENT-TYPE` can be used multiple times to specify what content
 types should be gzipped.  To extend the existing set, specify `guess` too, (eg.
-`--gzip-type=guess --gzip-type="image/svg+xml").  To gzip everything, specify
+`--gzip-type=guess --gzip-type="image/svg+xml"`).  To gzip everything, specify
 `all`, (eg. `--gzip-type=all`).
 
 `--processes=N` sets the number of parallel upload processes.
