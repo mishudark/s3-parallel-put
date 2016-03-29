@@ -132,11 +132,12 @@ def walk_filesystem(source, options):
     if os.path.isdir(source):
         for dirpath, dirnames, filenames in os.walk(source):
             for filename in filenames:
-                path = os.path.join(dirpath, filename)
-                if not os.path.isfile(path):
+                abs_path = os.path.join(dirpath, filename)
+                if not os.path.isfile(abs_path):
                     continue
-                key_name = os.path.normpath(os.path.join(options.prefix, path))
-                yield (key_name, dict(path=path))
+                rel_path = os.path.relpath(abs_path, source)
+                key_name = '/'.join([options.prefix] + rel_path.split(os.sep))
+                yield (key_name, dict(path=abs_path))
     elif os.path.isfile(source):
         key_name = os.path.normpath(os.path.join(options.prefix, source))
         yield (key_name, dict(path=source))
