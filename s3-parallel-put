@@ -38,6 +38,7 @@ from ssl import SSLError
 import sys
 import tarfile
 import time
+import magic
 import mimetypes
 
 import boto
@@ -264,8 +265,10 @@ def putter(put, put_queue, stat_queue, options):
 
                     content_type = None
                     if options.content_type:
-                        if options.content_type == "guess":
+                        if options.content_type in ["guess", "magic"]:
                             content_type = mimetypes.guess_type(value.path)[0]
+                            if options.content_type == "magic" and content_type is None:
+                              content_type = magic.from_file(value.path, mime=True)
                         else:
                             content_type = options.content_type
                         headers['Content-Type'] = content_type
@@ -334,7 +337,8 @@ def main(argv):
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Put options')
     group.add_option('--content-type', default='guess', metavar='CONTENT-TYPE',
-            help='set content type, set to "guess" to guess based on file name')
+            help='set content type, set to "guess" to guess based on file name '
+            'or "magic" to guess by filename and libmagic.')
     group.add_option('--gzip', action='store_true',
             help='gzip values and set content encoding')
     group.add_option('--gzip-type', action='append', default=[],
