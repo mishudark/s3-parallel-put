@@ -154,9 +154,10 @@ def walk_filesystem(source, options):
                 key_name = '/'.join([options.prefix] + rel_path.split(os.sep))
                 yield (key_name, dict(path=abs_path))
     elif os.path.isfile(source):
-        if not excluded(source, options):
-            key_name = os.path.normpath(os.path.join(options.prefix, source))
-            yield (key_name, dict(path=source))
+        if excluded(source, options):
+            continue
+        key_name = os.path.normpath(os.path.join(options.prefix, source))
+        yield (key_name, dict(path=source))
 
 
 def walk_tar(source, options):
@@ -165,12 +166,13 @@ def walk_tar(source, options):
         for tarinfo in tar_file:
             if tarinfo.isfile():
                 path = tarinfo.name
-                if not excluded(path, options):
-                    key_name = os.path.normpath(os.path.join(options.prefix, path))
-                    filename = source
-                    offset = tarinfo.offset_data
-                    size = tarinfo.size
-                    yield (key_name, dict(filename=filename, offset=offset, path=path, size=size))
+                if excluded(path, options):
+                    continue
+                key_name = os.path.normpath(os.path.join(options.prefix, path))
+                filename = source
+                offset = tarinfo.offset_data
+                size = tarinfo.size
+                yield (key_name, dict(filename=filename, offset=offset, path=path, size=size))
             # http://blogs.oucs.ox.ac.uk/inapickle/2011/06/20/high-memory-usage-when-using-pythons-tarfile-module/
             tar_file.members = []
     except tarfile.ReadError:
@@ -178,23 +180,25 @@ def walk_tar(source, options):
         for tarinfo in tar_file:
             if tarinfo.isfile():
                 path = tarinfo.name
-                if not excluded(path, options):
-                    key_name = os.path.normpath(os.path.join(options.prefix, path))
-                    content = tar_file.extractfile(tarinfo).read()
-                    yield (key_name, dict(content=content, path=path))
+                if excluded(path, options):
+                    continue
+                key_name = os.path.normpath(os.path.join(options.prefix, path))
+                content = tar_file.extractfile(tarinfo).read()
+                yield (key_name, dict(content=content, path=path))
 
 
 def walk_s3(source, options):
     connection = S3Connection(host=options.host, is_secure=options.secure)
     for key in connection.get_bucket(source).list():
-        if not excluded(key.name, options):
-            yield (
-                key.name,
-                dict(
-                    bucket_name=key.bucket.name,
-                    md5=key.etag,
-                    size=key.size,
-                    path='%s/%s' % (source, key.name)))
+        if excluded(key.name, options):
+            continue
+        yield (
+            key.name,
+            dict(
+                bucket_name=key.bucket.name,
+                md5=key.etag,
+                size=key.size,
+                path='%s/%s' % (source, key.name)))
 
 
 def walker(walk, put_queue, sources, options):
