@@ -38,7 +38,7 @@ from ssl import SSLError
 import sys
 import tarfile
 import time
-import magic
+import magic #python-magic
 import mimetypes
 
 import boto
@@ -265,10 +265,12 @@ def putter(put, put_queue, stat_queue, options):
 
                     content_type = None
                     if options.content_type:
-                        if options.content_type in ["guess", "magic"]:
+                        if options.content_type == 'guess':
                             content_type = mimetypes.guess_type(value.path)[0]
-                            if options.content_type == "magic" and content_type is None:
-                              content_type = magic.from_file(value.path, mime=True)
+                        if options.content_type == "magic":
+                            content_type = mimetypes.guess_type(value.path)[0]
+                            if content_type is None:
+                                content_type = magic.from_file(value.path, mime=True)
                         else:
                             content_type = options.content_type
                         headers['Content-Type'] = content_type
