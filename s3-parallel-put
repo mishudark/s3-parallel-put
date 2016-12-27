@@ -155,7 +155,7 @@ def walk_filesystem(source, options):
                 yield (key_name, dict(path=abs_path))
     elif os.path.isfile(source):
         if excluded(source, options):
-            continue
+            return
         key_name = os.path.normpath(os.path.join(options.prefix, source))
         yield (key_name, dict(path=source))
 
