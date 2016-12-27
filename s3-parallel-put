@@ -27,6 +27,7 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+import fnmatch
 from gzip import GzipFile
 from itertools import chain, imap, islice
 import logging
@@ -128,18 +129,34 @@ class Value(object):
     def should_copy_content(self):
         return self.bucket_name is None
 
+def excluded(pathname, options):
+  for glob in options.include:
+    if fnmatch.fnmatch(pathname, glob):
+      return False
+
+  for glob in options.exclude:
+    if fnmatch.fnmatch(pathname, glob):
+      return True
+
+  return False
 
 def walk_filesystem(source, options):
     if os.path.isdir(source):
         for dirpath, dirnames, filenames in os.walk(source):
+            if excluded(dirpath, options):
+                continue
             for filename in filenames:
                 abs_path = os.path.join(dirpath, filename)
                 if not os.path.isfile(abs_path):
+                    continue
+                if excluded(filename, options):
                     continue
                 rel_path = os.path.relpath(abs_path, source)
                 key_name = '/'.join([options.prefix] + rel_path.split(os.sep))
                 yield (key_name, dict(path=abs_path))
     elif os.path.isfile(source):
+        if excluded(source, options):
+            continue
         key_name = os.path.normpath(os.path.join(options.prefix, source))
         yield (key_name, dict(path=source))
 
@@ -150,6 +167,8 @@ def walk_tar(source, options):
         for tarinfo in tar_file:
             if tarinfo.isfile():
                 path = tarinfo.name
+                if excluded(path, options):
+                    continue
                 key_name = os.path.normpath(os.path.join(options.prefix, path))
                 filename = source
                 offset = tarinfo.offset_data
@@ -162,6 +181,8 @@ def walk_tar(source, options):
         for tarinfo in tar_file:
             if tarinfo.isfile():
                 path = tarinfo.name
+                if excluded(path, options):
+                    continue
                 key_name = os.path.normpath(os.path.join(options.prefix, path))
                 content = tar_file.extractfile(tarinfo).read()
                 yield (key_name, dict(content=content, path=path))
@@ -170,6 +191,8 @@ def walk_tar(source, options):
 def walk_s3(source, options):
     connection = S3Connection(host=options.host, is_secure=options.secure)
     for key in connection.get_bucket(source).list():
+        if excluded(key.name, options):
+            continue
         yield (
             key.name,
             dict(
@@ -336,6 +359,10 @@ def main(argv):
     group = OptionGroup(parser, 'Source options')
     group.add_option('--walk', choices=('filesystem', 'tar', 's3'), default='filesystem', metavar='MODE',
             help='set walk mode (filesystem or tar)')
+    group.add_option('--exclude', action='append', default=[], metavar='PATTERN', 
+            help='exclude files matching PATTERN')
+    group.add_option('--include', action='append', default=[], metavar='PATTERN', 
+            help='don\'t exclude files matching PATTERN')
     parser.add_option_group(group)
     group = OptionGroup(parser, 'Put options')
     group.add_option('--content-type', default='guess', metavar='CONTENT-TYPE',
