@@ -10,6 +10,7 @@ Dependencies
 
 * Python 2.X
 * [Boto](http://code.google.com/p/boto/)
+* [python-magic](https://github.com/ahupp/python-magic)
 
 
 Usage
