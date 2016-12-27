@@ -27,7 +27,7 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
-import fnmatch
+from fnmatch import fnmatch
 from gzip import GzipFile
 from itertools import chain, imap, islice
 import logging
@@ -130,11 +130,11 @@ class Value(object):
 
 def excluded(pathname, options):
   for glob in options.include:
-    if fnmatch.fnmatch(pathname, glob):
+    if fnmatch(pathname, glob):
       return False
 
   for glob in options.exclude:
-    if fnmatch.fnmatch(pathname, glob):
+    if fnmatch(pathname, glob):
       return True
 
   return False
